@@ -803,6 +803,20 @@ class CBCSHELL(SystemCallSolver):
             return
 
         # otherwise, go with the native CBC solution format.
+        try:
+            INPUT = open(self._soln_file, "r")
+        except IOError:
+            INPUT = []
+        try:
+            self._process_soln_lines(
+                results, INPUT, extract_duals, extract_reduced_costs
+            )
+        finally:
+            if not type(INPUT) is list:
+                INPUT.close()
+
+    def _process_soln_lines(self, results, lines, extract_duals, extract_reduced_costs):
+        """Read the lines of a solution file in the native CBC format"""
         if len(results.solution) > 0:
             solution = results.solution(0)
         else:
@@ -818,17 +832,12 @@ class CBCSHELL(SystemCallSolver):
         # CBC flags rows / columns that violate their bounds with "**"
         infeasible_point = False
 
-        try:
-            INPUT = open(self._soln_file, "r")
-        except IOError:
-            INPUT = []
-
         _ver = self.version()
         invert_objective_sense = results.problem.sense == maximize and (
             _ver and _ver[:3] < (2, 10, 2)
         )
 
-        for line in INPUT:
+        for line in lines:
             tokens = tuple(re.split('[ \t]+', line.strip()))
             n_tokens = len(tokens)
             #
@@ -863,7 +872,6 @@ class CBCSHELL(SystemCallSolver):
                     )
                     results.solver.status = SolverStatus.warning
                     solution.status = SolutionStatus.infeasible
-                    INPUT.close()
                     return
                 elif (
                     tokens[0] == 'Unbounded'
@@ -882,7 +890,6 @@ class CBCSHELL(SystemCallSolver):
                     )
                     results.solver.status = SolverStatus.warning
                     solution.status = SolutionStatus.unbounded
-                    INPUT.close()
                     return
                 elif n_tokens > 2 and tokens[0:2] == ('Stopped', 'on'):
                     optim_value = _float(tokens[-1])
@@ -1070,9 +1077,6 @@ class CBCSHELL(SystemCallSolver):
                     + "; expecting header, but "
                     "found data!"
                 )
-
-        if not type(INPUT) is list:
-            INPUT.close()
 
         if infeasible_point:
             # The point in the solution file is not feasible: do not

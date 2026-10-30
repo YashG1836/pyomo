@@ -9,7 +9,6 @@
 
 import os
 import sys
-from unittest import mock
 from os.path import dirname, abspath
 
 import pyomo.common.unittest as unittest
@@ -449,21 +448,16 @@ class TestCBCUsingMock(unittest.TestCase):
             34776,
         )
 
-    def _process_soln_text(self, soln_text, suffixes=()):
+    def _process_soln_text(self, soln_text, extract_suffixes=False):
         cbc_shell = CBCSHELL()
         cbc_shell._version = (2, 10, 12)
-        cbc_shell._suffixes = list(suffixes)
-        cbc_shell._soln_file = 'test.soln'
         results = SolverResults()
         # process_logfile() has already stored the (time limit) solution
         results.solution.insert(Solution())
         results.solution(0).status = SolutionStatus.stoppedByLimit
-        with mock.patch(
-            'pyomo.solvers.plugins.solvers.CBCplugin.open',
-            mock.mock_open(read_data=soln_text),
-            create=True,
-        ):
-            cbc_shell.process_soln_file(results)
+        cbc_shell._process_soln_lines(
+            results, soln_text.splitlines(), extract_suffixes, extract_suffixes
+        )
         return results
 
     def test_process_soln_file_stopped_on_time(self):
@@ -499,13 +493,13 @@ class TestCBCUsingMock(unittest.TestCase):
     def test_process_soln_file_infeasible_first_row(self):
         # A "**" on row 0 must not hide the start of the constraint
         # section (see #4066)
-        for suffixes in ((), ('dual', 'rc')):
+        for extract_suffixes in (False, True):
             results = self._process_soln_text(
                 "Stopped on time - objective value -3.00000000\n"
                 "**       0 c_u_c_                     2                      0\n"
                 "      0 x                          1                      0\n"
                 "      1 y                        2.5                      0\n",
-                suffixes,
+                extract_suffixes,
             )
             self.assertEqual(len(results.solution), 0)
 
